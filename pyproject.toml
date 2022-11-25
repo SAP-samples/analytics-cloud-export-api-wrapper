@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sacexport"
+version = "0.0.1"
+authors = [
+  { name="David Stocker", email="david.stocker@sap.com" },
+]
+description = "An example extractor package for exporting data from SAP Analytics Cloud, or working with it in Python tools"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/SAP-samples/analytics-cloud-export-api-wrapper"
+"Bug Tracker" = "https://github.com/SAP-samples/analytics-cloud-export-api-wrapper/issues"
