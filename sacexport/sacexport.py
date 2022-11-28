@@ -125,60 +125,75 @@ class SACConnection(object):
             raise e
 
     def getModelMetadata(self, providerID):
-            try:
-                modelMetadata = ModelMetadata()
-                urlMetadata = self.urlProviderRoot + "/" + providerID + "/$metadata"
-                response = self.oauth.get(urlMetadata)
+        try:
+            modelMetadata = ModelMetadata()
+            urlMetadata = self.urlProviderRoot + "/" + providerID + "/$metadata"
+            response = self.oauth.get(urlMetadata)
 
-                xmlData = minidom.parseString(response.text.encode("UTF-8"))
-                for entityTypeElement in xmlData.getElementsByTagName("EntityType"):
-                    nameAttribute = entityTypeElement.getAttribute("Name")
-                    if nameAttribute.find("FactData") > -1:
-                        #There will be more than one EntityType element, but only one named "FactData"
+            xmlData = minidom.parseString(response.text.encode("UTF-8"))
+            for entityTypeElement in xmlData.getElementsByTagName("EntityType"):
+                nameAttribute = entityTypeElement.getAttribute("Name")
+                if nameAttribute.find("FactData") > -1:
+                    # There will be more than one EntityType element, but only one named "FactData"
 
-                        for propertyRefElement in entityTypeElement.getElementsByTagName("PropertyRef"):
-                            prnAtt = propertyRefElement.getAttribute("Name")
+                    # all non-measure columns appear in the PropertyRef elements
+                    dimList = []
+                    for propertyRefElement in entityTypeElement.getElementsByTagName("PropertyRef"):
+                        prnAtt = propertyRefElement.getAttribute("Name")
+                        dimList.append(prnAtt)
 
-                            urlCurrDimMetadata = self.urlProviderRoot + "/" + providerID + "/" + prnAtt + "Master"
-                            currDimResponse = self.oauth.get(urlCurrDimMetadata)
-                            currDimResponseJson = json.loads(currDimResponse.text)
+                    # Property elements include all columns
+                    for propertyElement in entityTypeElement.getElementsByTagName("Property"):
+                        prAtt = propertyElement.getAttribute("Name")
+                        dataType = ""
 
-                            if prnAtt.find("Account_") == 0:
+                        # occurs oncce, so this little for loop will fetch us our only String grandchild of Property
+                        for stringElement in propertyElement.getElementsByTagName("String"):
+                            dataType = stringElement.childNodes[0].data
+
+                        urlCurrDimMetadata = self.urlProviderRoot + "/" + providerID + "/" + prAtt + "Master"
+                        currDimResponse = self.oauth.get(urlCurrDimMetadata)
+                        currDimResponseJson = json.loads(currDimResponse.text)
+
+                        # sort dimensions into the dimension dicts and measures into the measure list
+                        if prAtt in dimList:
+                            # modelMetadata.dateDimensions
+                            # modelMetadata.accounts
+                            # modelMetadata.versions
+                            # modelMetadata.dimensions
+                            if (dataType.find("DATE") == 0 or prAtt.find("Date") > -1):
+                                modelMetadata.dateDimensions[prAtt] = currDimResponseJson["value"]
+                            elif prAtt.find("Account_") == 0:
                                 aMembers = {}
                                 for aMember in currDimResponseJson["value"]:
                                     aID = aMember["ID"]
                                     aDesc = aMember["Description"]
                                     if aDesc:
                                         aMembers[aID] = aDesc
-                                    modelMetadata.accounts[prnAtt] = aMembers
-                            elif prnAtt.find("Version") > -1:
-                                modelMetadata.versions[prnAtt] = currDimResponseJson["value"]
-                            elif prnAtt.find("Date") > -1:
-                                modelMetadata.dateDimensions[prnAtt] = currDimResponseJson["value"]
+                                    modelMetadata.accounts[prAtt] = aMembers
+                            elif prAtt.find("Version") > -1:
+                                modelMetadata.versions[prAtt] = currDimResponseJson["value"]
                             else:
                                 mdMembers = {}
                                 for cdMember in currDimResponseJson["value"]:
                                     cmID = cdMember["ID"]
                                     cmDesc = cdMember["Description"]
                                     mdMembers[cmID] = cmDesc
-                                modelMetadata.dimensions[prnAtt] = mdMembers
-
-                        #Measure columns
-                        for propertyElement in entityTypeElement.getElementsByTagName("Property"):
-                            pnAtt = propertyElement.getAttribute("Name")
-                            if (pnAtt.find("Version") < 0) and (pnAtt not in modelMetadata.dateDimensions.keys()):
-                                if pnAtt not in modelMetadata.dimensions:
-                                    modelMetadata.measures.append(pnAtt)
-                self.modelMetadata[providerID] = modelMetadata
-                return modelMetadata
-            except Exception as e:
-                errorMsg = "Unknown error during token acquisition."
-                if e.status_code:
-                    errorMsg = "%s  Status code %s from server.  %s" %(errorMsg, e.status_code, e.error)
-                    raise RESTError(errorMsg)
-                else:
-                    errorMsg = "%s  %s" %(errorMsg, e.error)
-                    raise Exception(errorMsg)
+                                modelMetadata.dimensions[prAtt] = mdMembers
+                        elif ((prAtt not in dimList) or prAtt.find("Version") < 0):
+                            # Measures and versions show up in the modelMetadata.measures list
+                            if prAtt not in modelMetadata.dimensions:
+                                modelMetadata.measures.append(prAtt)
+            self.modelMetadata[providerID] = modelMetadata
+            return modelMetadata
+        except Exception as e:
+            errorMsg = "Unknown error during token acquisition."
+            if e.status_code:
+                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                raise RESTError(errorMsg)
+            else:
+                errorMsg = "%s  %s" % (errorMsg, e.error)
+                raise Exception(errorMsg)
 
 
     def getAuditData(self, providerID):
