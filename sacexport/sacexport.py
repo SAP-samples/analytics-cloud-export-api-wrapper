@@ -240,7 +240,7 @@ class SACConnection(object):
     def clearParamOverride(self, providerID):
         self.paramManualOverride[providerID] = None
 
-    def resolveFilter(self, providerID):
+    def resolveFilter(self, providerID, pagesize = None):
         returnVal = "?"
         ampersand = ""
         if self.paramManualOverride[providerID] is not None:
@@ -256,6 +256,9 @@ class SACConnection(object):
                 returnVal = "%s%s$filter=" %(returnVal, ampersand)
                 for currentFilter in self.filters[providerID]:
                     returnVal = "%s%s" %(returnVal, currentFilter)
+                ampersand = "&"
+            if pagesize is not None:
+                returnVal = "%s%spagesize=%s" %(returnVal, ampersand, pagesize)
             return returnVal
 
 
@@ -350,15 +353,14 @@ class SACConnection(object):
 
 
 
-    def getFactData(self, providerID):
+    def getFactData(self, providerID, pagesize = None):
         try:
-            filterString = self.resolveFilter(providerID)
+            filterString = self.resolveFilter(providerID, pagesize)
             urlFactData = self.urlProviderRoot + "/" + providerID + "/FactData" + filterString
-            response = self.oauth.get(urlFactData)
-            responseJson = json.loads(response.text)
-            return responseJson["value"]
+            fdRecordList = self.factDataRecordRollup(urlFactData)
+            return fdRecordList
         except Exception as e:
-            errorMsg = "Unknown error during token acquisition."
+            errorMsg = "Unknown error during fact data acquisition."
             if e.status_code:
                 errorMsg = "%s  Status code %s from server.  %s" %(errorMsg, e.status_code, e.error)
                 raise RESTError(errorMsg)
@@ -366,12 +368,22 @@ class SACConnection(object):
                 errorMsg = "%s  %s" %(errorMsg, e.error)
                 raise Exception(errorMsg)
 
+    def factDataRecordRollup(self, urlFactData):
+        response = self.oauth.get(urlFactData)
+        responseJson = json.loads(response.text)
+        fdRecordList = responseJson["value"]
+        if "@odata.nextLink" in responseJson:
+            fdRecordSubList = self.factDataRecordRollup(responseJson["@odata.nextLink"])
+            fdRecordList.extend(fdRecordSubList)
+        return fdRecordList
+
+
 if __name__ == "__main__":
     sac = SACConnection("appdesign", "eu10")
     sac.connect("sb-90703045-f504-4fed-b5b3-1a408e309e85!b16780|client!b3650", "Qlpl07Z7ehH9EDoTLJ21nZofBys=")
 
 
-    """
+
     # New Model
     hits = sac.searchProviders("TechEd2021")
     md = sac.getModelMetadata('Cdlvmnd17edjumrnshekknxo8w')
@@ -379,10 +391,11 @@ if __name__ == "__main__":
     sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "NationalParkUnitType", "National Park", sac.filterOperators.EQUAL)
     sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "Date", "197901", sac.filterOperators.EQUAL)
     sac.setFilterOrderBy('Cdlvmnd17edjumrnshekknxo8w', "State", "asc")
-    sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=5&$orderby=State asc&$filter=startswith(Region,'Inter') and State ne 'CO'")
-    sac.clearParamOverride('Cdlvmnd17edjumrnshekknxo8w')
-    md = sac.getFactData('Cdlvmnd17edjumrnshekknxo8w')
-    """
+    #sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=5&$orderby=State asc&$filter=startswith(Region,'Inter') and State ne 'CO'")
+    #sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=10&pagesize=5")
+    # sac.clearParamOverride('Cdlvmnd17edjumrnshekknxo8w')
+    fd = sac.getFactData('Cdlvmnd17edjumrnshekknxo8w', 10)
+
 
     """
     # Account Model
@@ -391,7 +404,7 @@ if __name__ == "__main__":
     sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Account_BestRunJ_sold", "Quantity_sold", sac.filterOperators.EQUAL)
     sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Product_3e315003an", "PD1", sac.filterOperators.EQUAL)
     sac.setFilterOrderBy('sap.epm:BestRunJuice_SampleModel', "Store_3z2g5g06m4", "asc")
-    md = sac.getFactData('sap.epm:BestRunJuice_SampleModel')
+    fd = sac.getFactData('sap.epm:BestRunJuice_SampleModel')
     """
 
     hello = "world"
