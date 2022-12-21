@@ -377,34 +377,3 @@ class SACConnection(object):
             fdRecordList.extend(fdRecordSubList)
         return fdRecordList
 
-
-if __name__ == "__main__":
-    sac = SACConnection("appdesign", "eu10")
-    sac.connect("sb-90703045-f504-4fed-b5b3-1a408e309e85!b16780|client!b3650", "Qlpl07Z7ehH9EDoTLJ21nZofBys=")
-
-
-
-    # New Model
-    hits = sac.searchProviders("TechEd2021")
-    md = sac.getModelMetadata('Cdlvmnd17edjumrnshekknxo8w')
-    sac.addStringFilter('Cdlvmnd17edjumrnshekknxo8w', "Region", "Inter", sac.filterStringOperations.STARTS_WITH)
-    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "NationalParkUnitType", "National Park", sac.filterOperators.EQUAL)
-    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "Date", "197901", sac.filterOperators.EQUAL)
-    sac.setFilterOrderBy('Cdlvmnd17edjumrnshekknxo8w', "State", "asc")
-    #sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=5&$orderby=State asc&$filter=startswith(Region,'Inter') and State ne 'CO'")
-    #sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=10&pagesize=5")
-    # sac.clearParamOverride('Cdlvmnd17edjumrnshekknxo8w')
-    fd = sac.getFactData('Cdlvmnd17edjumrnshekknxo8w', 10)
-
-
-    """
-    # Account Model
-    hits = sac.searchProviders("BestRunJuice_SampleModel")
-    md = sac.getModelMetadata('sap.epm:BestRunJuice_SampleModel')
-    sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Account_BestRunJ_sold", "Quantity_sold", sac.filterOperators.EQUAL)
-    sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Product_3e315003an", "PD1", sac.filterOperators.EQUAL)
-    sac.setFilterOrderBy('sap.epm:BestRunJuice_SampleModel', "Store_3z2g5g06m4", "asc")
-    fd = sac.getFactData('sap.epm:BestRunJuice_SampleModel')
-    """
-
-    hello = "world"
