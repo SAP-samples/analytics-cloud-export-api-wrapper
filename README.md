@@ -4,12 +4,12 @@
 
 # analytics-cloud-export-api-wrapper
 
-analytics-cloud-export-api-wrapper is a Python wrapper for SAP Analytics Cloud’s (SAC) model export API.  It has two aims.  Firstly, it demonstrates the basics for working with the SAC model export API and incorporating that into code.  Secondly, it is running code that can be used to access data from SAC in Jupyter notebooks and other Python code.  
+analytics-cloud-export-api-wrapper is a Python wrapper for SAP Analytics Cloud’s (SAC) [model export API](https://help.sap.com/docs/SAP_ANALYTICS_CLOUD/14cac91febef464dbb1efce20e3f1613/db62fd76514b48f8b71d695360320f4a.html).  It has two aims.  Firstly, it demonstrates the basics for working with the SAC model export API and incorporating that into code.  Secondly, it is running code that can be used to access data from SAC in Jupyter notebooks and other Python code.  
 
 ## Requirements
 
 Python 3.7 or higher installed
-An SAC tenant with authentication configured for an application
+An SAC tenant with [authentication configured for an application](https://help.sap.com/docs/SAP_ANALYTICS_CLOUD/14cac91febef464dbb1efce20e3f1613/0c1fb5e6ef1f46acb83771070084f124.html)
 
 
 ## Download and Installation
