@@ -68,12 +68,10 @@ class SACConnection(object):
         self.modelMetadata = {}
 
         #Filters
-        self.filterDimensionList = {}
         self.paramManualOverride = {}
         self.LG_AND = "and"
         self.LG_OR = "or"
         self.LG_NOT = "not"
-        self.filterTopN = {}
         self.filterOrderBy = {}
         self.filters = {}
         self.filterLogicGates = {}
@@ -294,34 +292,48 @@ class SACConnection(object):
                         currDimResponseJson = json.loads(currDimResponse.text)
 
                         # sort dimensions into the dimension dicts and measures into the measure list
-                        if prAtt in dimList:
+
+                        if prAtt not in dimList:
+                            # Measures and versions show up in the modelMetadata.measures list
+                            if prAtt not in modelMetadata.dimensions:
+                                modelMetadata.measures.append(prAtt)
+                        else:
                             # modelMetadata.dateDimensions
                             # modelMetadata.accounts
                             # modelMetadata.versions
                             # modelMetadata.dimensions
-                            if (dataType.find("DATE") == 0 or prAtt.find("Date") > -1):
-                                modelMetadata.dateDimensions[prAtt] = currDimResponseJson["value"]
-                            elif prAtt.find("Account_") == 0:
-                                aMembers = {}
-                                for aMember in currDimResponseJson["value"]:
-                                    aID = aMember["ID"]
-                                    aDesc = aMember["Description"]
-                                    if aDesc:
-                                        aMembers[aID] = aDesc
-                                    modelMetadata.accounts[prAtt] = aMembers
-                            elif prAtt.find("Version") > -1:
-                                modelMetadata.versions[prAtt] = currDimResponseJson["value"]
-                            else:
-                                mdMembers = {}
-                                for cdMember in currDimResponseJson["value"]:
+                            isAccount = False
+                            isVersion = False
+                            isDate = False
+                            mdMembers = {}
+                            for cdMember in currDimResponseJson["value"]:
+                                if "DATE" in cdMember:
+                                    isDate = True
+                                    cmID = cdMember["DATE"]
+                                    mdMembers[cmID] = cmID
+                                elif 'VERSION' in cdMember:
+                                    isVersion = True
                                     cmID = cdMember["ID"]
                                     cmDesc = cdMember["Description"]
                                     mdMembers[cmID] = cmDesc
+                                elif "accType" in cdMember:
+                                    isAccount = True
+                                    cmID = cdMember["ID"]
+                                    cmDesc = cdMember["Description"]
+                                    mdMembers[cmID] = cmDesc
+                                else:
+                                    cmID = cdMember["ID"]
+                                    cmDesc = cdMember["Description"]
+                                    mdMembers[cmID] = cmDesc
+                            if isAccount:
+                                modelMetadata.accounts[prAtt] = mdMembers
+                            elif isVersion:
+                                modelMetadata.versions[prAtt] = mdMembers
+                            elif isVersion:
+                                modelMetadata.dateDimensions[prAtt] = mdMembers
+                            else:
                                 modelMetadata.dimensions[prAtt] = mdMembers
-                        elif ((prAtt not in dimList) or prAtt.find("Version") < 0):
-                            # Measures and versions show up in the modelMetadata.measures list
-                            if prAtt not in modelMetadata.dimensions:
-                                modelMetadata.measures.append(prAtt)
+
             self.modelMetadata[providerID] = modelMetadata
             dimList = list(modelMetadata.dimensions.keys())
             self.addFilterProvider(providerID)
@@ -376,4 +388,3 @@ class SACConnection(object):
             fdRecordSubList = self.factDataRecordRollup(responseJson["@odata.nextLink"])
             fdRecordList.extend(fdRecordSubList)
         return fdRecordList
-
