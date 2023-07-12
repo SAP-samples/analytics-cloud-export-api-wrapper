@@ -1,9 +1,0 @@
-LICENSE
-README.md
-pyproject.toml
-sacexport/__init__.py
-sacexport/sacexport.py
-sacexport.egg-info/PKG-INFO
-sacexport.egg-info/SOURCES.txt
-sacexport.egg-info/dependency_links.txt
-sacexport.egg-info/top_level.txt

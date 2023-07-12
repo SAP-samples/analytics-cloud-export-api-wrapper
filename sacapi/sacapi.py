@@ -12,6 +12,15 @@ class OAuthError(ValueError):
 class RESTParamsError(ValueError):
     pass
 
+class UnmatchedColumnsError(ValueError):
+    pass
+
+class InvalidRowsError(ValueError):
+    pass
+
+class JobDeleteFailure(ValueError):
+    pass
+
 
 class FilterOperators(object):
     EQUAL = "eq"
@@ -50,6 +59,85 @@ class ModelMetadata(object):
     measures = []
     accounts = {}
     versions = {}
+    targetVersion = None
+    mapping = {}
+
+    def __init__(self, providerID):
+        self.modelID = providerID
+
+    def initializeMapping(self):
+        firstKey = list(self.versions.keys())[0]
+        firstKeyValue = self.versions[firstKey]
+        self.targetVersion = list(firstKeyValue.keys())[0]
+
+        #Initialize the mapping as if it were 1:1, essentially unmapped.
+        columnList = []
+        columnList.extend(self.dimensions.keys())
+        columnList.extend(self.dateDimensions.keys())
+        columnList.extend(self.accounts.keys())
+        columnList.extend(self.measures)
+        for column in columnList:
+            self.mapping [column] = column
+
+    def setMapping(self, modelCol, sourceCol):
+        try:
+            self.mapping[modelCol] = sourceCol
+        except KeyError as oa:
+            errorMsg = "Model column %s does not exist in model %s" % (modelCol, self.modelID)
+            raise ValueError(errorMsg)
+        except Exception as e:
+            errorMsg = "Unknown error during mapping validation"
+            errorMsg = "%s  %s" % (errorMsg, e.error)
+            raise Exception(errorMsg)
+
+
+    def validateMapping(self, sampleTuple, inheritTargetVersion = True):
+        sampleTupleNestedList = False
+        unmatchedModelCols = []
+        unmatchedImportCols = []
+
+        try:
+            if type(sampleTuple) is list:
+                #sampleTuple was provided as part of a list.  Take the first element
+                sampleTuple =  sampleTuple[0]
+                sampleTupleNestedList = True
+
+            if type(sampleTuple) is dict:
+                mappingValues = self.mapping.values()
+
+                # Check which model columns have no mappings from the sample tuple
+                for currMofColKey in self.mapping.keys():
+                    currMofColVal = self.mapping[currMofColKey]
+                    if currMofColVal not in sampleTuple.keys():
+                        unmatchedModelCols.append(currMofColKey)
+
+                # check which
+                for currImpColKey in sampleTuple.keys():
+                    if currImpColKey == 'Version':
+                        if inheritTargetVersion is True:
+                            self.targetVersion = sampleTuple[currImpColKey]
+                    else:
+                        if currImpColKey not in mappingValues:
+                            unmatchedImportCols.append(currImpColKey)
+
+                returnDict = {"unmatchedModelColumns": unmatchedModelCols, "unmatchedImportCols": unmatchedImportCols}
+                return returnDict
+            else:
+                errorMsg = ""
+                if sampleTupleNestedList:
+                    errorMsg = "validateMapping() was called with a list.  If checkMapping() is called with a list, then it needs to be a list of dicts.  Instead a dict, the first element is of type %s" %(type(sampleTuple))
+                else:
+                    errorMsg = "validateMapping() must be called with a dict, or list of dicts.  It was instead called with a %s" % (type(sampleTuple))
+                raise ValueError(errorMsg)
+        except ValueError as oa:
+            raise oa
+        except Exception as e:
+            errorMsg = "Unknown error during mapping validation"
+            errorMsg = "%s  %s" %(errorMsg, e.error)
+            raise Exception(errorMsg)
+
+
+
 
 
 
@@ -59,10 +147,13 @@ class SACConnection(object):
         self.dataCenter = dataCenter
         self.connectionNamespace = "sap"
         self.urlAccessToken = "https://" + tenantName + ".authentication." + dataCenter + ".hana.ondemand.com/oauth/token"
-        self.urlNamespaces = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataexport/administration/Namespaces"
-        self.urlProviders = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataexport/administration/Namespaces(NamespaceID='sac')/Providers"
-        self.urlProviderRoot = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataexport/providers/sac"
+        self.urlExportNamespaces = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataexport/administration/Namespaces"
+        self.urlExportProviders = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataexport/administration/Namespaces(NamespaceID='sac')/Providers"
+        self.urlExportProviderRoot = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataexport/providers/sac"
+        self.urlImportModels = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataimport/models"
+        self.urlImportJobs = "https://" + tenantName + "." + dataCenter + ".sapanalytics.cloud/api/v1/dataimport/jobs"
         self.accessToken = None
+        self.httpPostHeader = None
         self.providers = {}
         self.providerLookup = {}
         self.modelMetadata = {}
@@ -109,7 +200,15 @@ class SACConnection(object):
 
     def getProviders(self):
         try:
-            response = self.oauth.get(self.urlProviders)
+            #Touch the export providers endpoint, to get the catalog of available models
+            response = self.oauth.get(self.urlExportProviders)  #note - self.urlImportModels  would return the same thing
+
+            # Touch the import providers endpoint.  It gives mostly the same info as the export providers endpoint (with import, instead of export service urls), but it also gives us the CSRF token
+            initialHeaderParams = {"x-csrf-token": "fetch"}
+            importResponse = self.oauth.get(self.urlImportModels, headers=initialHeaderParams)
+            importCSRFToken = importResponse.headers._store["x-csrf-token"]
+            self.httpPostHeader = {"x-csrf-token" : importCSRFToken[1]}
+
             responseJson = json.loads(response.text)
             for provData in responseJson["value"]:
                 providerID = provData["ProviderID"]
@@ -136,13 +235,181 @@ class SACConnection(object):
                         else:
                             nNth = nNth + 1
         except Exception as e:
-            errorMsg = "Unknown error during token acquisition."
+            errorMsg = "Unknown error during provider (model) calatog read."
             if e.status_code:
                 errorMsg = "%s  Status code %s from server.  %s" %(errorMsg, e.status_code, e.error)
                 raise RESTError(errorMsg)
             else:
                 errorMsg = "%s  %s" %(errorMsg, e.error)
                 raise Exception(errorMsg)
+
+    def openLoadJob(self, modelMetadata, factOnly = True):
+        try:
+            importType = "/factData"
+            if not factOnly:
+                importType = "/masterFactData"
+
+            urlJobCreate = self.urlImportModels + "/" + modelMetadata.modelID + importType
+            postBody = json.dumps(modelMetadata.mapping)
+            postBody = '{ "Mapping": %s }' %postBody
+            jobCreationResponse = self.oauth.post(urlJobCreate, headers=self.httpPostHeader, data=postBody)
+
+            responseJson = json.loads(jobCreationResponse.text)
+            return responseJson['jobID']
+
+        except Exception as e:
+            errorMsg = "Unknown error during load job creation."
+            if e.status_code:
+                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                raise RESTError(errorMsg)
+            else:
+                errorMsg = "%s  %s" % (errorMsg, e.error)
+                raise Exception(errorMsg)
+
+
+    def pushToStaging(self, jobID, tupleList):
+        try:
+            if type(tupleList) is not list:
+                errorMsg = "Connection upload() method must be called with a list of dicts as tupleList parameter.  Instead it is of type %s" %(type(tupleList))
+                raise ValueError(errorMsg)
+                sampleTuple =  sampleTuple[0]
+                if  type(sampleTuple) is not dict:
+                    errorMsg = "Connection upload() method must be called with a list of dicts as tupleList parameter.  Instead a dict, the first element of the list is is of type %s" % (type(sampleTuple))
+                    raise ValueError(errorMsg)
+
+            urlJob  = self.urlImportJobs + "/" + jobID
+            tupleListString = json.dumps(tupleList)
+            postBody = '{ "Data": %s }' % tupleListString
+            jobPushResponse = self.oauth.post(urlJob, headers=self.httpPostHeader, data=postBody)
+            responseJson = json.loads(jobPushResponse.text)
+
+            return responseJson
+
+        except ValueError as ve:
+            raise ve
+        except Exception as e:
+            errorMsg = "Unknown error during load job creation."
+            if e.status_code:
+                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                raise RESTError(errorMsg)
+            else:
+                errorMsg = "%s  %s" % (errorMsg, e.error)
+                raise Exception(errorMsg)
+
+
+    def deleteJob(self, jobID):
+        try:
+            urlJob  = self.urlImportJobs + "/" + jobID
+            jobDeleteResponse = self.oauth.delete(urlJob, headers=self.httpPostHeader)
+            if jobDeleteResponse.status_code != 204:
+                errorMsg = "Failed to delete load job %s.  Status code = %s %s" %(jobID, jobDeleteResponse.status_code, jobDeleteResponse.text)
+                raise JobDeleteFailure(errorMsg)
+        except ValueError as ve:
+            raise ve
+        except Exception as e:
+            errorMsg = "Unknown error during load job deletion."
+            if e.status_code:
+                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                raise RESTError(errorMsg)
+            else:
+                errorMsg = "%s  %s" % (errorMsg, e.error)
+                raise Exception(errorMsg)
+
+
+
+    def runJob(self, jobID):
+        try:
+            urlJob  = self.urlImportJobs + "/" + jobID + "/run"
+            jobRunResponse = self.oauth.post(urlJob, headers=self.httpPostHeader)
+            responseJson = json.loads(jobRunResponse.text)
+            return responseJson
+        except ValueError as ve:
+            raise ve
+        except Exception as e:
+            errorMsg = "Unknown error during load job deletion."
+            if e.status_code:
+                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                raise RESTError(errorMsg)
+            else:
+                errorMsg = "%s  %s" % (errorMsg, e.error)
+                raise Exception(errorMsg)
+
+
+
+    def validateLoadJob(self, jobID):
+        try:
+            urlJobValidate= self.urlImportJobs + "/" + jobID + "/validate"
+            jobValidationResponse = self.oauth.post(urlJobValidate, headers=self.httpPostHeader)
+            responseJsonV = json.loads(jobValidationResponse.text)
+
+            invalidRowsResponse = self.oauth.get(responseJsonV['invalidRowsURL'])
+            invalidRowsResponseV = json.loads(invalidRowsResponse.text)
+
+            responseJsonV["failedRows"] = invalidRowsResponseV['failedRows']
+            return responseJsonV
+
+        except Exception as e:
+            errorMsg = "Unknown error during load job creation."
+            if e.status_code:
+                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                raise RESTError(errorMsg)
+            else:
+                errorMsg = "%s  %s" % (errorMsg, e.error)
+                raise Exception(errorMsg)
+
+
+
+    def upload(self, modelMetadata, tupleList, factOnly = True, forceCommit = False):
+        try:
+            #First test the mapping.  No point un uploading any data if they'll be rejected on the basis of unmatched columns
+            loadResults = {'status': "STARTED", 'responseMessage': ""}
+
+            unmatched = modelMetadata.validateMapping(tupleList)
+            if (len(unmatched['unmatchedModelColumns']) > 0) or (len(unmatched['unmatchedImportCols']) > 0):
+                errorMsg = "First data tuple has unmatched columns."
+                if len(unmatched['unmatchedModelColumns']) > 0:
+                    errorMsg = "%s  The following columns are in the SAC model, but not in the tuple: %s." %(errorMsg, unmatched['unmatchedModelColumns'])
+                if len(unmatched['unmatchedImportCols']) > 0:
+                    errorMsg = "%s  The following columns are in the SAC model, but not in the tuple: %s." %(errorMsg, unmatched['unmatchedImportCols'])
+                raise UnmatchedColumnsError(errorMsg)
+            else:
+                jobID = self.openLoadJob(modelMetadata, factOnly)
+                pushResponse = self.pushToStaging(jobID, tupleList)
+
+                if (len(pushResponse['failedRows']) > 0) and (forceCommit is False):
+                    errorMsg = "Upload Failed!  %s rows failed on initial load" %(len(pushResponse['failedRows']))
+                    loadResults['status'] = "FAILED_INITIAL_LOAD"
+                    loadResults['responseMessage'] = errorMsg
+                    loadResults['failedNumberRows'] = pushResponse['failedRows']
+                    self.deleteJob(jobID)
+                    raise InvalidRowsError(loadResults)
+                else:
+                    validationSattus = self.validateLoadJob(jobID)
+                    if (validationSattus['failedNumberRows'] > 0 ) and (forceCommit is False):
+                        errorMsg = "Upload Failed!  %s rows failed in validation" % (validationSattus['failedNumberRows'])
+                        loadResults['status'] = "FAILED_VALIDATION"
+                        loadResults['responseMessage'] = errorMsg
+                        loadResults['failedNumberRows'] = validationSattus['failedNumberRows']
+                        loadResults['failedRows'] = validationSattus['failedRows']
+                        self.deleteJob(jobID)
+                        raise InvalidRowsError(loadResults)
+                    else:
+                        commitResponse = self.runJob(jobID)
+        except UnmatchedColumnsError as e:
+            raise e
+        except InvalidRowsError as e:
+            raise e
+        except JobDeleteFailure as e:
+            raise e
+        except Exception as e:
+            errorMsg = "Unknown error during load job creation."
+            if e.status_code:
+                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                raise RESTError(errorMsg)
+            else:
+                errorMsg = "%s  %s" % (errorMsg, e.error)
+                raise Exception(errorMsg)
+
 
 
     def searchProviders(self, searchstr):
@@ -262,8 +529,8 @@ class SACConnection(object):
 
     def getModelMetadata(self, providerID):
         try:
-            modelMetadata = ModelMetadata()
-            urlMetadata = self.urlProviderRoot + "/" + providerID + "/$metadata"
+            modelMetadata = ModelMetadata(providerID)
+            urlMetadata = self.urlExportProviderRoot + "/" + providerID + "/$metadata"
             response = self.oauth.get(urlMetadata)
 
             xmlData = minidom.parseString(response.text.encode("UTF-8"))
@@ -287,7 +554,7 @@ class SACConnection(object):
                         for stringElement in propertyElement.getElementsByTagName("String"):
                             dataType = stringElement.childNodes[0].data
 
-                        urlCurrDimMetadata = self.urlProviderRoot + "/" + providerID + "/" + prAtt + "Master"
+                        urlCurrDimMetadata = self.urlExportProviderRoot + "/" + providerID + "/" + prAtt + "Master"
                         currDimResponse = self.oauth.get(urlCurrDimMetadata)
                         currDimResponseJson = json.loads(currDimResponse.text)
 
@@ -337,6 +604,7 @@ class SACConnection(object):
             self.modelMetadata[providerID] = modelMetadata
             dimList = list(modelMetadata.dimensions.keys())
             self.addFilterProvider(providerID)
+            modelMetadata.initializeMapping()
             return modelMetadata
         except Exception as e:
             errorMsg = "Unknown error during token acquisition."
@@ -350,7 +618,7 @@ class SACConnection(object):
 
     def getAuditData(self, providerID):
         try:
-            urlAuditData = self.urlProviderRoot + "/" + providerID + "/AuditData"
+            urlAuditData = self.urlExportProviderRoot + "/" + providerID + "/AuditData"
             response = self.oauth.get(urlAuditData)
             responseJson = json.loads(response.text)
             return responseJson["value"]
@@ -368,7 +636,7 @@ class SACConnection(object):
     def getFactData(self, providerID, pagesize = None):
         try:
             filterString = self.resolveFilter(providerID, pagesize)
-            urlFactData = self.urlProviderRoot + "/" + providerID + "/FactData" + filterString
+            urlFactData = self.urlExportProviderRoot + "/" + providerID + "/FactData" + filterString
             fdRecordList = self.factDataRecordRollup(urlFactData)
             return fdRecordList
         except Exception as e:
@@ -389,25 +657,30 @@ class SACConnection(object):
             fdRecordList.extend(fdRecordSubList)
         return fdRecordList
 
-
 if __name__ == "__main__":
     sac = SACConnection("appdesign", "eu10")
-    sac.connect("sb-90703045-f504-4fed-b5b3-1a408e309e85!b16780|client!b3650", "Qlpl07Z7ehH9EDoTLJ21nZofBys=")
-
-
-    # New Model
-
+    sac.connect("sb-11595662-9022-4465-b6a2-eb55d4e42dd7!b16780|client!b3650", "c6896517-5225-4d39-a7f1-f09cfec240f2$6wWgeClR67gqlAAd3c2xA80ofC557dHIfzxdeqw5NjE=")
     hits = sac.searchProviders("TechEd2021")
     md = sac.getModelMetadata('Cdlvmnd17edjumrnshekknxo8w')
-    sac.addStringFilter('Cdlvmnd17edjumrnshekknxo8w', "Region", "Inter", sac.filterStringOperations.STARTS_WITH)
+    #jobID = sac.openLoadJob('Cdlvmnd17edjumrnshekknxo8w')
+    sac.addStringFilter('Cdlvmnd17edjumrnshekknxo8w', "Region", "Pacific", sac.filterStringOperations.STARTS_WITH)
     sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "NationalParkUnitType", "National Park", sac.filterOperators.EQUAL)
-    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "Date", "197901", sac.filterOperators.EQUAL)
+    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "Date", "202105", sac.filterOperators.EQUAL)
     sac.setFilterOrderBy('Cdlvmnd17edjumrnshekknxo8w', "State", "asc")
-    sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=5&$orderby=State asc&$filter=startswith(Region,'Inter') and State ne 'CO'")
+    sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=5&$orderby=State asc&$filter=startswith(Region,'Pacific') and State ne 'WA'")
     #sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=10&pagesize=5")
     sac.clearParamOverride('Cdlvmnd17edjumrnshekknxo8w')
     fd = sac.getFactData('Cdlvmnd17edjumrnshekknxo8w', 10)
 
+    unmappedCols = md.validateMapping(fd)
+    md.setMapping("NationalPark", "ParkID")
+    unmappedCols = md.validateMapping([{'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284}])
+    unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284})
+    unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 67284})
+
+    uploadData = [{'Date': '202305', 'AddedDate' : '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 100000}]
+    uploadData = [{'Date': '202305', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 100000}]
+    sac.upload(md, uploadData)
 
 
     """

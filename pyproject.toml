@@ -4,13 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sacapi"
-version = "0.0.1"
-authors = [
-  { name="David Stocker", email="david.stocker@sap.com" },
-]
+version = "0.0.8"
 description = "An example package for exporting data from SAP Analytics Cloud or importing data into it, or working with it in Python tools"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {file = "LICENSE"}
+
+dependencies = [
+  "oauthlib >= 3.2.2",
+  "requests_oauthlib >= 1.3.1",
+]
+
+authors = [
+  { name="David Stocker", email="david.stocker@sap.com" },
+]
+
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
