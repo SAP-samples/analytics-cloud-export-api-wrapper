@@ -679,7 +679,7 @@ if __name__ == "__main__":
     unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 67284})
 
     uploadData = [{'Date': '202305', 'AddedDate' : '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 100000}]
-    uploadData = [{'Date': '202305', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 100000}]
+    uploadData = [{'Date': '102305', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 100000}]
     sac.upload(md, uploadData)
 
 
