@@ -551,7 +551,7 @@ class SACConnection(object):
                         prnAtt = propertyRefElement.getAttribute("Name")
                         dimList.append(prnAtt)
 
-                    # Property elements include all columns
+                    # Property elements include all columnsPackb0xcanyon!!
                     for propertyElement in entityTypeElement.getElementsByTagName("Property"):
                         prAtt = propertyElement.getAttribute("Name")
                         dataType = ""
