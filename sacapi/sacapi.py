@@ -41,6 +41,11 @@ class FilterLogicGateSymbols(object):
     LG_OR = "or"
     LG_NOT = "not"
 
+class UpdatePolicy(object):
+    UPDATE = "Update"
+    CLEAN_AND_REPLACE = "CleanAndReplace"
+
+
 
 logicGate = FilterLogicGateSymbols()
 
@@ -169,6 +174,7 @@ class SACConnection(object):
         self.filterOperators = FilterOperators()
         self.filterStringOperations = StringFilters()
         self.logicGateOperators = FilterLogicGateSymbols()
+        self.updatePolicy = UpdatePolicy()
 
 
     def getAccessToken(self, clientID, clientSecret):
@@ -243,7 +249,7 @@ class SACConnection(object):
                 errorMsg = "%s  %s" %(errorMsg, e.error)
                 raise Exception(errorMsg)
 
-    def openLoadJob(self, modelMetadata, factOnly = True):
+    def openLoadJob(self, modelMetadata, factOnly = True, importMethod = "Update"):
         try:
             importType = "/factData"
             if not factOnly:
@@ -251,7 +257,7 @@ class SACConnection(object):
 
             urlJobCreate = self.urlImportModels + "/" + modelMetadata.modelID + importType
             postBody = json.dumps(modelMetadata.mapping)
-            postBody = '{ "Mapping": %s }' %postBody
+            postBody = '{ "Mapping": %s }, "JobSettings": { "importMethod": %s} ' %(postBody, importMethod)
             jobCreationResponse = self.oauth.post(urlJobCreate, headers=self.httpPostHeader, data=postBody)
 
             responseJson = json.loads(jobCreationResponse.text)
@@ -359,7 +365,7 @@ class SACConnection(object):
 
 
 
-    def upload(self, modelMetadata, tupleList, factOnly = True, forceCommit = False):
+    def upload(self, modelMetadata, tupleList, factOnly = True, forceCommit = False, importMethod = "Update"):
         try:
             #First test the mapping.  No point un uploading any data if they'll be rejected on the basis of unmatched columns
             loadResults = {'status': "STARTED", 'responseMessage': ""}
@@ -373,7 +379,7 @@ class SACConnection(object):
                     errorMsg = "%s  The following columns are in the SAC model, but not in the tuple: %s." %(errorMsg, unmatched['unmatchedImportCols'])
                 raise UnmatchedColumnsError(errorMsg)
             else:
-                jobID = self.openLoadJob(modelMetadata, factOnly)
+                jobID = self.openLoadJob(modelMetadata, factOnly, importMethod)
                 pushResponse = self.pushToStaging(jobID, tupleList)
 
                 if (len(pushResponse['failedRows']) > 0) and (forceCommit is False):
@@ -616,8 +622,9 @@ class SACConnection(object):
                 raise Exception(errorMsg)
 
 
-    def getAuditData(self, providerID):
+    def getAuditData(self, modelMetadata):
         try:
+            providerID = modelMetadata.modelID
             urlAuditData = self.urlExportProviderRoot + "/" + providerID + "/AuditData"
             response = self.oauth.get(urlAuditData)
             responseJson = json.loads(response.text)
@@ -633,8 +640,9 @@ class SACConnection(object):
 
 
 
-    def getFactData(self, providerID, pagesize = None):
+    def getFactData(self, modelMetadata, pagesize = None):
         try:
+            providerID = modelMetadata.modelID
             filterString = self.resolveFilter(providerID, pagesize)
             urlFactData = self.urlExportProviderRoot + "/" + providerID + "/FactData" + filterString
             fdRecordList = self.factDataRecordRollup(urlFactData)
@@ -656,41 +664,3 @@ class SACConnection(object):
             fdRecordSubList = self.factDataRecordRollup(responseJson["@odata.nextLink"])
             fdRecordList.extend(fdRecordSubList)
         return fdRecordList
-
-if __name__ == "__main__":
-    sac = SACConnection("appdesign", "eu10")
-    sac.connect("sb-11595662-9022-4465-b6a2-eb55d4e42dd7!b16780|client!b3650", "c6896517-5225-4d39-a7f1-f09cfec240f2$6wWgeClR67gqlAAd3c2xA80ofC557dHIfzxdeqw5NjE=")
-    hits = sac.searchProviders("TechEd2021")
-    md = sac.getModelMetadata('Cdlvmnd17edjumrnshekknxo8w')
-    #jobID = sac.openLoadJob('Cdlvmnd17edjumrnshekknxo8w')
-    sac.addStringFilter('Cdlvmnd17edjumrnshekknxo8w', "Region", "Pacific", sac.filterStringOperations.STARTS_WITH)
-    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "NationalParkUnitType", "National Park", sac.filterOperators.EQUAL)
-    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "Date", "202105", sac.filterOperators.EQUAL)
-    sac.setFilterOrderBy('Cdlvmnd17edjumrnshekknxo8w', "State", "asc")
-    sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=5&$orderby=State asc&$filter=startswith(Region,'Pacific') and State ne 'WA'")
-    #sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=10&pagesize=5")
-    sac.clearParamOverride('Cdlvmnd17edjumrnshekknxo8w')
-    fd = sac.getFactData('Cdlvmnd17edjumrnshekknxo8w', 10)
-
-    unmappedCols = md.validateMapping(fd)
-    md.setMapping("NationalPark", "ParkID")
-    unmappedCols = md.validateMapping([{'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284}])
-    unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284})
-    unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 67284})
-
-    uploadData = [{'Date': '202305', 'AddedDate' : '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 100000}]
-    uploadData = [{'Date': '102305', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 100000}]
-    sac.upload(md, uploadData)
-
-
-    """
-    # Account Model
-    hits = sac.searchProviders("BestRunJuice_SampleModel")
-    md = sac.getModelMetadata('sap.epm:BestRunJuice_SampleModel')
-    sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Account_BestRunJ_sold", "Quantity_sold", sac.filterOperators.EQUAL)
-    sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Product_3e315003an", "PD1", sac.filterOperators.EQUAL)
-    sac.setFilterOrderBy('sap.epm:BestRunJuice_SampleModel', "Store_3z2g5g06m4", "asc")
-    fd = sac.getFactData('sap.epm:BestRunJuice_SampleModel')
-    """
-
-    hello = "world"
