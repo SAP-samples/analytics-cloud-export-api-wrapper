@@ -1,15 +1,13 @@
 # sacapi Usage
 
-
-
-
 ## Export Specific Methods
 
 ![][image-1]
 
 
-## Import Specific Methods
 
+
+## Import Specific Methods
 
 ![][image-2]
 
