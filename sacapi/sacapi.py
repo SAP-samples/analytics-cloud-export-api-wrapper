@@ -12,6 +12,9 @@ class OAuthError(ValueError):
 class RESTParamsError(ValueError):
     pass
 
+class MissingCSRFTokenError(ValueError):
+    pass
+
 class UnmatchedColumnsError(ValueError):
     pass
 
@@ -210,10 +213,19 @@ class SACConnection(object):
             response = self.oauth.get(self.urlExportProviders)  #note - self.urlImportModels  would return the same thing
 
             # Touch the import providers endpoint.  It gives mostly the same info as the export providers endpoint (with import, instead of export service urls), but it also gives us the CSRF token
-            initialHeaderParams = {"x-csrf-token": "fetch"}
-            importResponse = self.oauth.get(self.urlImportModels, headers=initialHeaderParams)
-            importCSRFToken = importResponse.headers._store["x-csrf-token"]
-            self.httpPostHeader = {"x-csrf-token" : importCSRFToken[1]}
+            importResponse = None
+            try:
+                initialHeaderParams = {"x-csrf-token": "fetch"}
+                importResponse = self.oauth.get(self.urlImportModels, headers=initialHeaderParams)
+                importCSRFToken = importResponse.headers._store["x-csrf-token"]
+                self.httpPostHeader = {"x-csrf-token": importCSRFToken[1]}
+                self.csrfTokenStatus = True
+            except KeyError:
+                importResponse = self.oauth.get(self.urlExportProviderRoot)
+                self.csrfTokenStatus = False
+                warningMsg = "WARNING.  Failed to connect to %s and fell back on %s, to read the model catalog." % (self.urlImportModels, self.urlExportProviderRoot)
+                warningMsg = "%s  No CSRF token is available from this endpoint, so import operations will not be possible." % warningMsg
+                print(warningMsg)
 
             responseJson = json.loads(response.text)
             for provData in responseJson["value"]:
@@ -250,57 +262,67 @@ class SACConnection(object):
                 raise Exception(errorMsg)
 
     def openLoadJob(self, modelMetadata, factOnly = True, importMethod = "Update"):
-        try:
-            importType = "/factData"
-            if not factOnly:
-                importType = "/masterFactData"
+        if self.csrfTokenStatus:
+            try:
+                importType = "/factData"
+                if not factOnly:
+                    importType = "/masterFactData"
 
-            urlJobCreate = self.urlImportModels + "/" + modelMetadata.modelID + importType
-            postBody = json.dumps(modelMetadata.mapping)
-            postBody = '{ "Mapping": %s }, "JobSettings": { "importMethod": %s} ' %(postBody, importMethod)
-            jobCreationResponse = self.oauth.post(urlJobCreate, headers=self.httpPostHeader, data=postBody)
+                urlJobCreate = self.urlImportModels + "/" + modelMetadata.modelID + importType
+                postBody = json.dumps(modelMetadata.mapping)
+                postBody = '{ "Mapping": %s }, "JobSettings": { "importMethod": %s} ' %(postBody, importMethod)
+                jobCreationResponse = self.oauth.post(urlJobCreate, headers=self.httpPostHeader, data=postBody)
 
-            responseJson = json.loads(jobCreationResponse.text)
-            return responseJson['jobID']
+                responseJson = json.loads(jobCreationResponse.text)
+                return responseJson['jobID']
 
-        except Exception as e:
-            errorMsg = "Unknown error during load job creation."
-            if e.status_code:
-                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
-                raise RESTError(errorMsg)
-            else:
-                errorMsg = "%s  %s" % (errorMsg, e.error)
-                raise Exception(errorMsg)
+            except Exception as e:
+                errorMsg = "Unknown error during load job creation."
+                if e.status_code:
+                    errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                    raise RESTError(errorMsg)
+                else:
+                    errorMsg = "%s  %s" % (errorMsg, e.error)
+                    raise Exception(errorMsg)
+        else:
+            errorMsg = "Missing CSRF Token.  Import related operations use http POST and are not possible without a valid CSRF token."
+            errorMsg = "%s  Likely reason is that sacapi could not connect to the /api/v1/dataimport/models endpoint, during initial connection." % errorMsg
+            raise MissingCSRFTokenError(errorMsg)
 
 
     def pushToStaging(self, jobID, tupleList):
-        try:
-            if type(tupleList) is not list:
-                errorMsg = "Connection upload() method must be called with a list of dicts as tupleList parameter.  Instead it is of type %s" %(type(tupleList))
-                raise ValueError(errorMsg)
-                sampleTuple =  sampleTuple[0]
-                if  type(sampleTuple) is not dict:
-                    errorMsg = "Connection upload() method must be called with a list of dicts as tupleList parameter.  Instead a dict, the first element of the list is is of type %s" % (type(sampleTuple))
+        if self.csrfTokenStatus:
+            try:
+                if type(tupleList) is not list:
+                    errorMsg = "Connection upload() method must be called with a list of dicts as tupleList parameter.  Instead it is of type %s" %(type(tupleList))
                     raise ValueError(errorMsg)
+                    sampleTuple =  sampleTuple[0]
+                    if  type(sampleTuple) is not dict:
+                        errorMsg = "Connection upload() method must be called with a list of dicts as tupleList parameter.  Instead a dict, the first element of the list is is of type %s" % (type(sampleTuple))
+                        raise ValueError(errorMsg)
 
-            urlJob  = self.urlImportJobs + "/" + jobID
-            tupleListString = json.dumps(tupleList)
-            postBody = '{ "Data": %s }' % tupleListString
-            jobPushResponse = self.oauth.post(urlJob, headers=self.httpPostHeader, data=postBody)
-            responseJson = json.loads(jobPushResponse.text)
+                urlJob  = self.urlImportJobs + "/" + jobID
+                tupleListString = json.dumps(tupleList)
+                postBody = '{ "Data": %s }' % tupleListString
+                jobPushResponse = self.oauth.post(urlJob, headers=self.httpPostHeader, data=postBody)
+                responseJson = json.loads(jobPushResponse.text)
 
-            return responseJson
+                return responseJson
 
-        except ValueError as ve:
-            raise ve
-        except Exception as e:
-            errorMsg = "Unknown error during load job creation."
-            if e.status_code:
-                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
-                raise RESTError(errorMsg)
-            else:
-                errorMsg = "%s  %s" % (errorMsg, e.error)
-                raise Exception(errorMsg)
+            except ValueError as ve:
+                raise ve
+            except Exception as e:
+                errorMsg = "Unknown error during load job creation."
+                if e.status_code:
+                    errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                    raise RESTError(errorMsg)
+                else:
+                    errorMsg = "%s  %s" % (errorMsg, e.error)
+                    raise Exception(errorMsg)
+        else:
+            errorMsg = "Missing CSRF Token.  Import related operations use http POST and are not possible without a valid CSRF token."
+            errorMsg = "%s  Likely reason is that sacapi could not connect to the /api/v1/dataimport/models endpoint, during initial connection." % errorMsg
+            raise MissingCSRFTokenError(errorMsg)
 
 
     def deleteJob(self, jobID):
@@ -324,44 +346,54 @@ class SACConnection(object):
 
 
     def runJob(self, jobID):
-        try:
-            urlJob  = self.urlImportJobs + "/" + jobID + "/run"
-            jobRunResponse = self.oauth.post(urlJob, headers=self.httpPostHeader)
-            responseJson = json.loads(jobRunResponse.text)
-            return responseJson
-        except ValueError as ve:
-            raise ve
-        except Exception as e:
-            errorMsg = "Unknown error during load job deletion."
-            if e.status_code:
-                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
-                raise RESTError(errorMsg)
-            else:
-                errorMsg = "%s  %s" % (errorMsg, e.error)
-                raise Exception(errorMsg)
+        if self.csrfTokenStatus:
+            try:
+                urlJob  = self.urlImportJobs + "/" + jobID + "/run"
+                jobRunResponse = self.oauth.post(urlJob, headers=self.httpPostHeader)
+                responseJson = json.loads(jobRunResponse.text)
+                return responseJson
+            except ValueError as ve:
+                raise ve
+            except Exception as e:
+                errorMsg = "Unknown error during load job deletion."
+                if e.status_code:
+                    errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                    raise RESTError(errorMsg)
+                else:
+                    errorMsg = "%s  %s" % (errorMsg, e.error)
+                    raise Exception(errorMsg)
+        else:
+            errorMsg = "Missing CSRF Token.  Import related operations use http POST and are not possible without a valid CSRF token."
+            errorMsg = "%s  Likely reason is that sacapi could not connect to the /api/v1/dataimport/models endpoint, during initial connection." % errorMsg
+            raise MissingCSRFTokenError(errorMsg)
 
 
 
     def validateLoadJob(self, jobID):
-        try:
-            urlJobValidate= self.urlImportJobs + "/" + jobID + "/validate"
-            jobValidationResponse = self.oauth.post(urlJobValidate, headers=self.httpPostHeader)
-            responseJsonV = json.loads(jobValidationResponse.text)
+        if self.csrfTokenStatus:
+            try:
+                urlJobValidate= self.urlImportJobs + "/" + jobID + "/validate"
+                jobValidationResponse = self.oauth.post(urlJobValidate, headers=self.httpPostHeader)
+                responseJsonV = json.loads(jobValidationResponse.text)
 
-            invalidRowsResponse = self.oauth.get(responseJsonV['invalidRowsURL'])
-            invalidRowsResponseV = json.loads(invalidRowsResponse.text)
+                invalidRowsResponse = self.oauth.get(responseJsonV['invalidRowsURL'])
+                invalidRowsResponseV = json.loads(invalidRowsResponse.text)
 
-            responseJsonV["failedRows"] = invalidRowsResponseV['failedRows']
-            return responseJsonV
+                responseJsonV["failedRows"] = invalidRowsResponseV['failedRows']
+                return responseJsonV
 
-        except Exception as e:
-            errorMsg = "Unknown error during load job creation."
-            if e.status_code:
-                errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
-                raise RESTError(errorMsg)
-            else:
-                errorMsg = "%s  %s" % (errorMsg, e.error)
-                raise Exception(errorMsg)
+            except Exception as e:
+                errorMsg = "Unknown error during load job creation."
+                if e.status_code:
+                    errorMsg = "%s  Status code %s from server.  %s" % (errorMsg, e.status_code, e.error)
+                    raise RESTError(errorMsg)
+                else:
+                    errorMsg = "%s  %s" % (errorMsg, e.error)
+                    raise Exception(errorMsg)
+        else:
+            errorMsg = "Missing CSRF Token.  Import related operations use http POST and are not possible without a valid CSRF token."
+            errorMsg = "%s  Likely reason is that sacapi could not connect to the /api/v1/dataimport/models endpoint, during initial connection." % errorMsg
+            raise MissingCSRFTokenError(errorMsg)
 
 
 
