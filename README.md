@@ -143,16 +143,74 @@ Other instance variables are also used to keep track of which versions are avail
 
 
 
+
 ## OData filters in Export
 
-OData supports 
+OData supports query filters.  Before you downlaod any data, you can manage the OData filters, for that model.   **sacapi** supports logical filters, string filters and handcrafted string filters; stored for the length of the session.  For convenience, the valid filter operators are stored in the class variables *filterOperators* and *filterStringOperations*, in **SACConnection**.   **SACConnection** addLogicalFilter() and addLogicalFilter() (the so-called "fast filters") methods both take four mandatory parameters; modelID, columnName, filterValue, and operator.
+
+
+```python
+sac.addLogicalFilter(<modelID>, columnName, filterValue, operator)
+```
+
+```python
+sac.addStringFilter(<modelID>, columnName, filterValue, operator)
+```
+
+You can add additional filters, thereby stacking them.  There is always an implicit "AND" presumed.
+
+```python
+sac.addStringFilter(<modelID>, "Region", "Pacific", sac.filterStringOperations.STARTS_WITH)
+sac.addLogicalFilter(<modelID>, "NationalParkUnitType", "National Park", sac.filterOperators.EQUAL)
+sac.addLogicalFilter(<modelID>, "Date", "202105", sac.filterOperators.EQUAL)
+```
+
+You can order returned fact data, by a specified column.
+
+The setFilterOrderBy() method 
+```python
+sac.setFilterOrderBy(<modelID>, orderByCol, ascDesc)
+```
+
+The available options for ascDesc are "asc" and "desc".
+
+You can also override these "fast filters", and manually set an OData filter query.  If there is an override manual filter present, it will always be used, instead of whatever fast filters may be applied.
+
+```python
+sac.setParamOverride(<modelID>, moValue)
+```
+
+*moValue* is the manual override value, and is a string containing an OData filter.  E.g.
+
+```python
+sac.setParamOverride(<modelID>, "$top=5&$orderby=State asc&$filter=startswith(Region,'Pacific') and State ne 'WA'")
+```
+
+If you want to remove this override and revert to the fast filters (if any exist), clearParamOverride() will do this for you.
+```python
+sac.clearParamOverride(<modelID>)
+```
+
+
+### Logical Filters
+* SACConnection.filterOperators.EQUAL
+* SACConnection.filterOperators.NOT_EQUAL
+* SACConnection.filterOperators.GREATER_THAN
+* SACConnection.filterOperators.LESS_THAN
+* SACConnection.filterOperators.GREATER_THAN_OR_EQUAL
+* SACConnection.filterOperators.LESS_THAN_OR_EQUAL
+
+### String Filters
+* SACConnection.filterStringOperations.CONTAINS
+* SACConnection.filterStringOperations.STARTS_WITH
+* SACConnection.filterStringOperations.ENDS_WITH
  
 
 
 ## Getting Fact Data (Export)
 
 
-To get the model fact data, call the getFactData() method.  It takes the model ModelMetadata object as its only parameter.  It returns a list of dictionaries, with the column names as keys and cell values as values.  This includes the version column, which is normally hidden.  The returned data can be immediately converted into a [Pandas(https://pandas.pydata.org/)] dataframe.
+To get the model fact data, call the getFactData() method.  It takes the model ModelMetadata object as its only parameter.  It returns a list of dictionaries, with the column names as keys and cell values as values.  This includes the version column, which is normally hidden.  The returned data can be immediately converted into a [Pandas](https://pandas.pydata.org/) dataframe.
 
 ```python
 fd = sac.getFactData(md)
@@ -176,8 +234,38 @@ An example return
 
 
 
-
 ## Import Specific Methods
+
+For importing, there are three principal methods.  You can:
+Set the mapping, if needed, between the uploaded data and the model columns.  The mapping is maintained as a dictionary instance variable, on the **ModelMetadata** object.
+Validate the mapping, which the **ModelMetadata** currently has.  
+Upload fact data
+
+Af a column in your dataset has the same name as a column in the model, it will automatically be mapped.  If you have a column that needs to be mapped, to match the model, the setMapping() method, in the **ModelMetadata** class will do this for you.
+
+The pattern is setMapping(<datasetColumnName>, <modelColumnName>)
+
+E.g.
+
+```python
+md.setMapping("NationalPark", "ParkID")
+```
+
+The validateMapping() method, in the **ModelMetadata** class validates the current mapping.  It will tell you which columns in the model currently have nothing mapped to them and which columns in the dataset are not mapped to anything in the model.  The validateMapping() method takes the dataset, or the first column of the dataset as its single, required parameter.  It will not upload the dataset, only check its mapping.  It will return a dict, containing this information.
+
+E.g.
+
+```python
+unmappedCols = md.validateMapping([{'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284}])
+```
+
+-OR-
+
+```python
+unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284})
+```
+
+To upload the data, use the upload() method, on the **SACConnection** class.  It takes the **ModelMetadata** object and the uploaded fact data as parameters.
 
 ```python
 sac.upload(md, <uploadData>)
