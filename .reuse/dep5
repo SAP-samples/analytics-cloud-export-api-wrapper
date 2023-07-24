@@ -27,3 +27,16 @@ Disclaimer: The code in this project may include calls to APIs ("API Calls") of
 Files: *
 Copyright:  2023 SAP SE or an SAP affiliate company and analytics-cloud-export-api-wrapper contributors
 License: Apache-2.0
+
+
+Files: docs/images/*
+Copyright: SAP SE or an SAP affiliate company <david.stocker@sap.com>
+License: Apache-2.0
+
+Files: sacapi.egg-info/*
+Copyright: SAP SE or an SAP affiliate company <david.stocker@sap.com>
+License: Apache-2.0
+
+Files: dist/*
+Copyright: SAP SE or an SAP affiliate company <david.stocker@sap.com>
+License: Apache-2.0
