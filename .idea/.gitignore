@@ -11,3 +11,8 @@
 .idea/vcs.xml
 dist/.DS_Store
 docs/.DS_Store
+
+
+# SPDX-FileCopyrightText: 2019 Jane Doe <jane@example.com>
+#
+# SPDX-License-Identifier: Apache-2.0

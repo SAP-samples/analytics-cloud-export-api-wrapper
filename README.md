@@ -289,3 +289,8 @@ If you wish to contribute code, offer fixes or improvements, please send a pull 
 
 ## License
 Copyright (c) 2022 SAP SE or an SAP affiliate company. All rights reserved. This project is licensed under the Apache Software License, version 2.0 except as noted otherwise in the [LICENSE](https://raw.githubusercontent.com/SAP-samples/analytics-cloud-export-api-wrapper/main/LICENSES/Apache-2.0.txt?token=GHSAT0AAAAAAB2MAUL26SOZQOB4VIRO3ZNCY5SU5VQ) file.
+
+<!--
+SPDX-FileCopyrightText: SAP SE or an SAP affiliate company <david.stocker@sap.com>
+SPDX-License-Identifier: Apache-2.0
+-->

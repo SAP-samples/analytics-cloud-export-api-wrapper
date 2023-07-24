@@ -28,3 +28,7 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/SAP-samples/analytics-cloud-export-api-wrapper"
 "Bug Tracker" = "https://github.com/SAP-samples/analytics-cloud-export-api-wrapper/issues"
+
+# SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company <david.stocker@sap.com>
+#
+# SPDX-License-Identifier: Apache-2.0

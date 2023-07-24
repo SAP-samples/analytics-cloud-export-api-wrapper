@@ -698,40 +698,6 @@ class SACConnection(object):
         return fdRecordList
 
 
-if __name__ == "__main__":
-    sac = SACConnection("appdesign", "eu10")
-    sac.connect("sb-11595662-9022-4465-b6a2-eb55d4e42dd7!b16780|client!b3650", "c6896517-5225-4d39-a7f1-f09cfec240f2$6wWgeClR67gqlAAd3c2xA80ofC557dHIfzxdeqw5NjE=")
-    hits = sac.searchProviders("TechEd2021")
-    md = sac.getModelMetadata('Cdlvmnd17edjumrnshekknxo8w')
-    #jobID = sac.openLoadJob('Cdlvmnd17edjumrnshekknxo8w')
-    sac.addStringFilter('Cdlvmnd17edjumrnshekknxo8w', "Region", "Pacific", sac.filterStringOperations.STARTS_WITH)
-    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "NationalParkUnitType", "National Park", sac.filterOperators.EQUAL)
-    sac.addLogicalFilter('Cdlvmnd17edjumrnshekknxo8w', "Date", "202105", sac.filterOperators.EQUAL)
-    sac.setFilterOrderBy('Cdlvmnd17edjumrnshekknxo8w', "State", "asc")
-    sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=5&$orderby=State asc&$filter=startswith(Region,'Pacific') and State ne 'WA'")
-    #sac.setParamOverride('Cdlvmnd17edjumrnshekknxo8w', "$top=10&pagesize=5")
-    sac.clearParamOverride('Cdlvmnd17edjumrnshekknxo8w')
-    fd = sac.getFactData(md, 10)
-
-    unmappedCols = md.validateMapping(fd)
-    md.setMapping("NationalPark", "ParkID")
-    unmappedCols = md.validateMapping([{'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284}])
-    unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 67284})
-    unmappedCols = md.validateMapping({'Date': '202105', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 67284})
-
-    uploadData = [{'Date': '202305', 'AddedDate' : '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Recreational Visitors': 100000}]
-    uploadData = [{'Date': '202305', 'AddedDate': '202307', 'ParkID': 'YOSE', 'Region': 'Pacific West ', 'State': 'CA', 'NationalParkUnitType': 'National Park', 'Visitors': 100001}]
-    sac.upload(md, uploadData)
-
-
-    """
-    # Account Model
-    hits = sac.searchProviders("BestRunJuice_SampleModel")
-    md = sac.getModelMetadata('sap.epm:BestRunJuice_SampleModel')
-    sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Account_BestRunJ_sold", "Quantity_sold", sac.filterOperators.EQUAL)
-    sac.addLogicalFilter('sap.epm:BestRunJuice_SampleModel', "Product_3e315003an", "PD1", sac.filterOperators.EQUAL)
-    sac.setFilterOrderBy('sap.epm:BestRunJuice_SampleModel', "Store_3z2g5g06m4", "asc")
-    fd = sac.getFactData('sap.epm:BestRunJuice_SampleModel')
-    """
-
-    hello = "world"
+# SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company <david.stocker@sap.com>
+#
+# SPDX-License-Identifier: Apache-2.0
