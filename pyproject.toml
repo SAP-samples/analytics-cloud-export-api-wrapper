@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sacapi"
-version = "0.0.8"
+version = "1.0.0"
 description = "An example package for exporting data from SAP Analytics Cloud or importing data into it, or working with it in Python tools"
 readme = "README.md"
 requires-python = ">=3.10"
