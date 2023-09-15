@@ -25,15 +25,21 @@ Copy and paste the code into your Python script, or download the package and pla
 
 ## Quickstart
 
+sacapi is a single module package.  That module is called sacapi.  Keep this inn mind, when importing and I suggest directly importing the module.
+
+```python
+from sacapi import sacapi
+```
+
 Everything is controlled through a SACConnection object.  To create this object, you'll need the tenant name and data center code for your SAC tenant.
 
 ```python
-sac = SACConnection(<tenantName>, <dataCenter>)
+sac = sacapi.SACConnection(<tenantName>, <dataCenter>)
 ```
 
 E.g. to connect to the appdesign demo tenant, in the eu10 data center, the command would be:
 ```python
-sac = SACConnection("appdesign", "eu10")
+sac = sacapi.SACConnection("appdesign", "eu10")
 ```
 
 To connect, execute the SACConnection's connect() method, with the OAuth clientID and appSecret.
